@@ -15,6 +15,9 @@ def _tokenize(text: str) -> List[str]:
 def _tfidf_vectorize(docs: List[str]) -> Tuple[List[List[float]], List[str]]:
     # Build vocabulary
     vocab = sorted({tok for d in docs for tok in _tokenize(d)})
+    if not vocab:
+        return [[]], []
+    
     df = {t: 0 for t in vocab}
     tokenized = []
     for d in docs:
@@ -54,8 +57,21 @@ class SimpleRetriever:
         self._vectors, self._vocab = _tfidf_vectorize(self.corpus)
 
     def query(self, q: str, k: int = 3) -> List[Tuple[str, float]]:
-        q_vecs, _ = _tfidf_vectorize([q])
-        qv = q_vecs[0]
+        # Vectorize query using corpus vocabulary
+        q_toks = _tokenize(q)
+        q_tf = {t: 0 for t in self._vocab}
+        for t in q_toks:
+            if t in q_tf:
+                q_tf[t] += 1
+        
+        # Calculate IDF for query
+        N = len(self.corpus)
+        df = {t: sum(1 for d in self.corpus if t in _tokenize(d)) for t in self._vocab}
+        qv = []
+        for t in self._vocab:
+            idf = math.log((N + 1) / (df[t] + 1)) + 1.0
+            qv.append(q_tf[t] * idf)
+        
         scores = [(_cosine(qv, dv), doc) for doc, dv in zip(self.corpus, self._vectors)]
         top = sorted(scores, key=lambda x: x[0], reverse=True)[:k]
         return [(doc, float(score)) for score, doc in top]
